@@ -2,8 +2,11 @@ build/
 log/
 install/
 src/puzzlebot_week2/
+src/puzzlebot_localization_cpp/
+src/puzzlebot_slam/
 odom_square/
-src/lpc_codebook_training/
 docs/
 .dockerignore
+FULL_INSTRUCTIONS.md
+CLAUDE.md
 *.pyc
