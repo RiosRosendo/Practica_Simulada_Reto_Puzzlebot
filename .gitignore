@@ -3,7 +3,6 @@ log/
 install/
 src/puzzlebot_week2/
 src/puzzlebot_slam/
-src/puzzlebot_localization_cpp/
 odom_square/
 docs/
 .dockerignore
