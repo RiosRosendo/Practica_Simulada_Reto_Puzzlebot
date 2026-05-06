@@ -1,0 +1,32 @@
+slam_node:
+  ros__parameters:
+    # Grid dimensions
+    resolution:   0.05          # m/cell  (5 cm)
+    map_width:    400            # cells   (20 m)
+    map_height:   400            # cells   (20 m)
+
+    # Log-odds thresholds — re-balanced for the heal-vs-remember tradeoff.
+    # Bias toward "occupied wins" (l_occ / |l_free| ≈ 2.5×) so distant walls
+    # don't get voted out by grazing free-rays; asymmetric clamps (occupied
+    # remembers longer than free does) so once established walls survive
+    # being briefly out of view, but ghost cells from a pre-ICP-correction
+    # pose still fade within ~10–15 contradicting observations.
+    l_occ:        0.50           # increment per LiDAR hit
+    l_free:      -0.20           # decrement per free ray cell
+    l_min:       -2.0            # clamp minimum (free saturates fast)
+    l_max:        3.5            # clamp maximum (occupied persists longer)
+
+    # ICP scan matcher (disabled by default — mapping with known pose)
+    use_icp:          false
+    icp_max_iter:     20
+    icp_tolerance:    0.0001
+    icp_reject_dist:  0.3        # reject pairs further than this (m)
+    icp_min_points:   20         # fallback to odometry if fewer inliers
+    icp_max_fitness:  0.2        # reject ICP if mean error exceeds this (m)
+
+    # Scan filtering
+    range_min:   0.12
+    range_max:   10.0
+
+    # Publish /map every N scans (lower = more CPU)
+    map_publish_every: 5

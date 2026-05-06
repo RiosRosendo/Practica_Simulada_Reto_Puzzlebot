@@ -3,7 +3,8 @@ log/
 install/
 src/puzzlebot_week2/
 odom_square/
-src/lpc_codebook_training/
 docs/
 .dockerignore
+FULL_INSTRUCTIONS.md
+CLAUDE.md
 *.pyc

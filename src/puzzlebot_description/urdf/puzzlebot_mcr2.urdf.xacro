@@ -18,6 +18,10 @@
   <xacro:property name="wheel_mass" value="0.1"/>
   <xacro:property name="caster_mass" value="0.01"/>
 
+  <!-- LiDAR mounting yaw — physical RPLidar A1 on the MCR2 ships rotated 180°
+       (motor/cable facing rear); Gazebo's gpu_lidar emits ray 0 along +X. -->
+  <xacro:property name="lidar_yaw" value="${0.0 if '$(arg is_sim)' == 'true' else 3.141592653589793}"/>
+
   <!-- Inertia macros -->
   <xacro:macro name="cylinder_inertia" params="m r h">
     <inertial>
@@ -181,7 +185,7 @@
   <joint name="lidar_joint" type="fixed">
     <parent link="base_link"/>
     <child link="lidar_link"/>
-    <origin xyz="0.05 0 0.110" rpy="0 0 0"/>
+    <origin xyz="0.05 0 0.110" rpy="0 0 ${lidar_yaw}"/>
   </joint>
 
   <!-- base_link -> camera_link -->

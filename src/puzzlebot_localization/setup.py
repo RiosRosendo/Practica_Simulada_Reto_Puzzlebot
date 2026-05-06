@@ -32,6 +32,7 @@ setup(
             'dead_reckoning     = puzzlebot_localization.dead_reckoning:main',
             'tf_broadcaster     = puzzlebot_localization.tf_broadcaster:main',
             'mcl_node = puzzlebot_localization.mcl_node:main',
+            'velocity_bridge = puzzlebot_localization.velocity_bridge:main',
         ],
     },
 )
