@@ -2,7 +2,6 @@ build/
 log/
 install/
 src/puzzlebot_week2/
-src/puzzlebot_slam/
 odom_square/
 docs/
 .dockerignore
