@@ -271,7 +271,8 @@ def sample_free_particles(occ_map, n_particles):
 # ── Phase 3: Particle scoring ──────────────────────────────────────────────────
 
 def score_particles(particles, ranges, angle_min, angle_increment,
-                    likelihood, range_min=0.12, range_max=12.0, ray_step=5):
+                    likelihood, range_min=0.12, range_max=12.0, ray_step=5,
+                    laser_x=0.0, laser_y=0.0, laser_yaw=0.0):
     """
     Activity Step E: assign a score to every particle based on the sum of
     likelihood-field pixel values at the projected LiDAR endpoints.
@@ -327,6 +328,14 @@ def score_particles(particles, ranges, angle_min, angle_increment,
     # Absolute angle of each selected ray in the sensor frame
     ray_angles_sensor = angle_min + idx_valid * angle_increment  # (M_valid,)
 
+    # Endpoints in the LiDAR frame, then transformed into base_link frame
+    # using the static (laser_x, laser_y, laser_yaw) SE(2) offset from TF.
+    px_laser = r_valid * np.cos(ray_angles_sensor)               # (M_valid,)
+    py_laser = r_valid * np.sin(ray_angles_sensor)               # (M_valid,)
+    cL, sL = math.cos(laser_yaw), math.sin(laser_yaw)
+    px_base = laser_x + cL * px_laser - sL * py_laser            # (M_valid,)
+    py_base = laser_y + sL * px_laser + cL * py_laser            # (M_valid,)
+
     # ── Vectorised endpoint computation ───────────────────────────────────────
     # We want: for every (particle, ray) pair → one endpoint (ex, ey).
     # Shape trick: expand particles to (N,1) and rays to (1,M) so numpy
@@ -335,13 +344,12 @@ def score_particles(particles, ranges, angle_min, angle_increment,
     xs     = particles[:, 0, np.newaxis]   # (N, 1)  world x of each particle
     ys     = particles[:, 1, np.newaxis]   # (N, 1)  world y
     thetas = particles[:, 2, np.newaxis]   # (N, 1)  heading
+    cT = np.cos(thetas)                    # (N, 1)
+    sT = np.sin(thetas)                    # (N, 1)
 
-    # World-frame ray angle = particle heading + sensor-frame ray angle
-    world_angles = thetas + ray_angles_sensor[np.newaxis, :]   # (N, M_valid)
-
-    # Endpoint coordinates in metres
-    ex = xs + r_valid[np.newaxis, :] * np.cos(world_angles)    # (N, M_valid)
-    ey = ys + r_valid[np.newaxis, :] * np.sin(world_angles)    # (N, M_valid)
+    # World-frame endpoint = particle pose ⊕ base-frame endpoint
+    ex = xs + cT * px_base[np.newaxis, :] - sT * py_base[np.newaxis, :]  # (N, M_valid)
+    ey = ys + sT * px_base[np.newaxis, :] + cT * py_base[np.newaxis, :]  # (N, M_valid)
 
     # ── World → pixel ──────────────────────────────────────────────────────────
     # Use likelihood field shape to handle dynamic map sizes (300x300, 500x500, etc.)

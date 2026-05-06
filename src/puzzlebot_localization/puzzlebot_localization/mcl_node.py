@@ -20,6 +20,10 @@ from geometry_msgs.msg import Pose, PoseArray, PoseStamped
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float32
 
+import tf2_ros
+from rclpy.time import Time
+from rclpy.duration import Duration
+
 from puzzlebot_localization.map_utils import (
     MAP_RESOLUTION,
     MAP_SIZE_PX,
@@ -48,6 +52,7 @@ class MCLNode(Node):
         self.declare_parameter('keep_fraction',  0.5)
         self.declare_parameter('sigma_xy',      0.005)
         self.declare_parameter('sigma_theta',   0.01)
+        self.declare_parameter('base_frame',    'base_link')
 
         n_particles   = self.get_parameter('n_particles').value
         sigma_field_m = self.get_parameter('sigma_field_m').value
@@ -72,6 +77,12 @@ class MCLNode(Node):
         # Kidnap recovery
         self._zero_score_count  = 0
         self._KIDNAP_THRESHOLD  = 30
+
+        # TF: cached base_link → laser_frame static transform
+        self.base_frame    = self.get_parameter('base_frame').value
+        self._tf_buffer    = tf2_ros.Buffer()
+        self._tf_listener  = tf2_ros.TransformListener(self._tf_buffer, self)
+        self._laser_offset = None    # (x, y, yaw) in base frame, lazy-resolved
 
         # Odometry accumulators
         self._wr = 0.0
@@ -113,7 +124,36 @@ class MCLNode(Node):
         self._delta_s     += v     * self._odom_dt
         self._delta_theta += omega * self._odom_dt
 
+    def _resolve_laser_offset(self, laser_frame):
+        """Lookup base_frame → laser_frame once and cache. Returns False if not yet available."""
+        if self._laser_offset is not None:
+            return True
+        try:
+            tf = self._tf_buffer.lookup_transform(
+                self.base_frame, laser_frame, Time(),
+                timeout=Duration(seconds=0.0))
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException):
+            return False
+        t = tf.transform.translation
+        q = tf.transform.rotation
+        siny = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        yaw  = math.atan2(siny, cosy)
+        self._laser_offset = (float(t.x), float(t.y), float(yaw))
+        self.get_logger().info(
+            f'[MCL] Laser→{self.base_frame} offset cached: '
+            f'x={t.x:.3f} y={t.y:.3f} yaw={math.degrees(yaw):.1f}°')
+        return True
+
     def _scan_callback(self, msg: LaserScan):
+        if not self._resolve_laser_offset(msg.header.frame_id):
+            self.get_logger().warn(
+                f'[MCL] Waiting for TF {self.base_frame}→{msg.header.frame_id}',
+                throttle_duration_sec=2.0)
+            return
+
+        lx, ly, lyaw = self._laser_offset
         ranges = np.array(msg.ranges, dtype=np.float64)
 
         # Count valid rays
@@ -130,6 +170,7 @@ class MCLNode(Node):
             range_min=msg.range_min,
             range_max=msg.range_max,
             ray_step=self.ray_step,
+            laser_x=lx, laser_y=ly, laser_yaw=lyaw,
         )
 
         best_score = float(self.scores.max()) if len(self.scores) > 0 else 0.0
