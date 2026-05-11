@@ -136,6 +136,15 @@ def launch_setup(context, *args, **kwargs):
         output='screen',
     )
 
+    teleop_sim = Node(
+            package='teleop_twist_keyboard',
+            executable='teleop_twist_keyboard',
+            name='teleop_twist_keyboard',
+            output='screen',
+            prefix='xterm -e',
+            remappings=[('cmd_vel', '/cmd_vel')],
+    )
+
     return [
         velocity_bridge,
         lidar_tf_bridge,
@@ -145,6 +154,7 @@ def launch_setup(context, *args, **kwargs):
         robot_state_publisher,
         joint_state_publisher,
         rviz,
+        teleop_sim,
     ]
 
 
