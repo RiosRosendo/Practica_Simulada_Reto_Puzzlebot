@@ -71,6 +71,13 @@ class SLAMNode(Node):
         self.declare_parameter('range_max',          10.0)
         self.declare_parameter('map_publish_every',  5)
         self.declare_parameter('base_frame',         'base_link')
+        self.declare_parameter('ray_step',           1)
+        self.declare_parameter('min_delta_xy',       0.02)
+        self.declare_parameter('min_delta_theta',    0.01)
+        self.declare_parameter('display_l_occ',      1.0)
+        self.declare_parameter('display_l_free',    -0.5)
+        self.declare_parameter('laser_yaw_trim',     0.0)
+        self.declare_parameter('map_initial_heading', 0.0)
 
         res    = self.get_parameter('resolution').value
         w      = self.get_parameter('map_width').value
@@ -83,6 +90,8 @@ class SLAMNode(Node):
             l_free=self.get_parameter('l_free').value,
             l_min=self.get_parameter('l_min').value,
             l_max=self.get_parameter('l_max').value,
+            display_l_occ=self.get_parameter('display_l_occ').value,
+            display_l_free=self.get_parameter('display_l_free').value,
         )
 
         # ── State ─────────────────────────────────────────────────────
@@ -102,16 +111,23 @@ class SLAMNode(Node):
         # of using the latest (newer) odom, which fans walls during rotation.
         self._odom_buf = deque(maxlen=200)   # ~10 s at 20 Hz
 
-        # map→odom TF offset
-        self._tf_x = 0.0
-        self._tf_y = 0.0
-        self._tf_theta = 0.0
+        # map→odom TF offset — seeded with map_initial_heading so the map
+        # frame is pre-rotated to match the room orientation at launch.
+        self._tf_x     = 0.0
+        self._tf_y     = 0.0
+        self._tf_theta = self.get_parameter('map_initial_heading').value
 
         # Keep previous scan already projected in WORLD frame so use_icp=True
         # matches against a correct historical reference (was: base-frame, then
         # re-projected at the *current* slam pose — which baked in zero motion).
         self._prev_cloud_world = None
         self._scan_count = 0
+
+        # Last pose at which the occupancy grid was updated — used for the
+        # minimum-movement threshold to suppress stationary LiDAR jitter.
+        self._last_map_x     = 0.0
+        self._last_map_y     = 0.0
+        self._last_map_theta = 0.0
 
         # TF: cached base_frame → laser_frame static offset
         self.base_frame    = self.get_parameter('base_frame').value
@@ -194,10 +210,13 @@ class SLAMNode(Node):
         siny = 2.0 * (q.w * q.z + q.x * q.y)
         cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         yaw  = math.atan2(siny, cosy)
+        trim = self.get_parameter('laser_yaw_trim').value
+        yaw  = _wrap(yaw + trim)
         self._laser_offset = (float(t.x), float(t.y), float(yaw))
         self.get_logger().info(
             f'Laser→{self.base_frame} offset cached: '
-            f'x={t.x:.3f} y={t.y:.3f} yaw={math.degrees(yaw):.1f}°')
+            f'x={t.x:.3f} y={t.y:.3f} yaw={math.degrees(yaw):.1f}° '
+            f'(trim={math.degrees(trim):.2f}°)')
         return True
 
     def _scan_callback(self, msg: LaserScan):
@@ -225,9 +244,19 @@ class SLAMNode(Node):
         range_min = self.get_parameter('range_min').value
         range_max = self.get_parameter('range_max').value
 
+        # Subsample rays: every `ray_step`-th ray reduces CPU load on the
+        # Jetson without meaningfully degrading map or ICP quality.
+        ray_step  = self.get_parameter('ray_step').value
+        if ray_step > 1:
+            ranges_sub = np.array(msg.ranges, dtype=np.float64)[::ray_step]
+            angle_inc  = msg.angle_increment * ray_step
+        else:
+            ranges_sub = msg.ranges
+            angle_inc  = msg.angle_increment
+
         # Current scan as point cloud in base_link frame (laser offset applied)
         cloud = scan_to_points(
-            msg.ranges, msg.angle_min, msg.angle_increment,
+            ranges_sub, msg.angle_min, angle_inc,
             range_min, range_max,
             laser_x=lx, laser_y=ly, laser_yaw=lyaw)
 
@@ -275,12 +304,26 @@ class SLAMNode(Node):
         _, _, theta_end = self._odom_at(scan_t + scan_dur)
         scan_omega = _wrap(theta_end - scan_otheta) / scan_dur if scan_dur > 0 else 0.0
 
-        self.grid.update_scan(
-            scan_slam_x, scan_slam_y, scan_slam_theta,
-            msg.ranges, msg.angle_min, msg.angle_increment,
-            range_min, range_max,
-            laser_x=lx, laser_y=ly, laser_yaw=lyaw,
-            scan_omega=scan_omega, scan_time=scan_dur)
+        # Minimum-movement gate: skip the (expensive) map update when the
+        # robot is nearly stationary — stationary LiDAR jitter adds noise
+        # without contributing new information.
+        min_xy    = self.get_parameter('min_delta_xy').value
+        min_theta = self.get_parameter('min_delta_theta').value
+        moved = (
+            math.hypot(scan_slam_x - self._last_map_x,
+                       scan_slam_y - self._last_map_y) >= min_xy or
+            abs(_wrap(scan_slam_theta - self._last_map_theta)) >= min_theta
+        )
+        if moved:
+            self.grid.update_scan(
+                scan_slam_x, scan_slam_y, scan_slam_theta,
+                ranges_sub, msg.angle_min, angle_inc,
+                range_min, range_max,
+                laser_x=lx, laser_y=ly, laser_yaw=lyaw,
+                scan_omega=scan_omega, scan_time=scan_dur)
+            self._last_map_x     = scan_slam_x
+            self._last_map_y     = scan_slam_y
+            self._last_map_theta = scan_slam_theta
 
         # ── Recompute map→odom TF from the (possibly ICP-refined) SLAM pose
         # T_map_odom = T_map_base ⊕ T_odom_base⁻¹
