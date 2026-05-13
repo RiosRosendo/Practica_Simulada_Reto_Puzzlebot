@@ -31,6 +31,9 @@ path_follower:
     obstacle_slow_dist: 0.60
     # Half-angle of the forward cone monitored for obstacles (degrees)
     obstacle_cone_deg: 40.0
+    # Spin in place at startup so SLAM sees all walls before navigating (0 to disable)
+    initial_spin_duration: 9.0   # seconds (~360° at 0.70 rad/s)
+    initial_spin_speed: 0.70     # rad/s
 
 # ── Dynamic Obstacle Spawner ───────────────────────────────────────────────
 obstacle_spawner:

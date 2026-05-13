@@ -5,24 +5,22 @@ slam_node:
     map_width:    400            # cells   (20 m)
     map_height:   400            # cells   (20 m)
 
-    # Log-odds thresholds — re-balanced for the heal-vs-remember tradeoff.
-    # Bias toward "occupied wins" (l_occ / |l_free| ≈ 2.5×) so distant walls
-    # don't get voted out by grazing free-rays; asymmetric clamps (occupied
-    # remembers longer than free does) so once established walls survive
-    # being briefly out of view, but ghost cells from a pre-ICP-correction
-    # pose still fade within ~10–15 contradicting observations.
-    l_occ:        0.50           # increment per LiDAR hit
-    l_free:      -0.20           # decrement per free ray cell
-    l_min:       -2.0            # clamp minimum (free saturates fast)
-    l_max:        3.5            # clamp maximum (occupied persists longer)
+    # Log-odds thresholds tuned for Gazebo simulation (no ICP, clean odometry).
+    # Higher l_occ → walls appear after fewer hits.
+    # Lower |l_free| → walls are not erased by rays from other angles.
+    l_occ:        0.70           # increment per LiDAR hit (walls appear after ~2 hits)
+    l_free:      -0.12           # decrement per free ray cell (gentle erasure)
+    l_min:       -2.0            # clamp minimum
+    l_max:        4.0            # clamp maximum (walls persist longer)
 
-    # ICP scan matcher — enabled for real robot to correct heading drift
-    use_icp:          true
-    icp_max_iter:     30         # more iterations → better convergence on noisy data
+    # ICP scan matcher — disabled for simulation (Gazebo odometry is accurate;
+    # ICP in symmetric rooms converges to wrong local minima and causes pose jumps)
+    use_icp:          false
+    icp_max_iter:     30
     icp_tolerance:    0.0001
-    icp_reject_dist:  0.5        # generous for real-world laser noise (was 0.3)
-    icp_min_points:   20         # fallback to odometry if fewer inliers
-    icp_max_fitness:  0.2        # reject ICP if mean error exceeds this (m)
+    icp_reject_dist:  0.5
+    icp_min_points:   20
+    icp_max_fitness:  0.2
 
     # Map frame initial heading (radians).  Rotates the entire map frame at
     # startup so walls appear horizontal/vertical without the robot needing
@@ -59,5 +57,5 @@ slam_node:
     # classify a cell as occupied/free in the published map.  With
     # l_occ=0.50 and l_free=-0.20, display_l_occ=1.5 requires ~3 net hits
     # and display_l_free=-0.8 requires ~4 net free observations.
-    display_l_occ:   1.5
-    display_l_free: -0.8
+    display_l_occ:   1.0    # needs ~2 hits to show as occupied (was 1.5 = 3 hits)
+    display_l_free: -0.6    # needs ~5 rays to show as free

@@ -49,6 +49,8 @@ class PathFollowerNode(Node):
         self.declare_parameter('obstacle_stop_dist',   0.35)  # m — full stop
         self.declare_parameter('obstacle_slow_dist',   0.60)  # m — start slowing
         self.declare_parameter('obstacle_cone_deg',   40.0)   # half-angle of front cone
+        self.declare_parameter('initial_spin_duration', 9.0)  # s; 0 to disable
+        self.declare_parameter('initial_spin_speed',    0.70)  # rad/s (~360° in 9s)
 
         self._path: Path | None = None
         self._robot_pose: PoseStamped | None = None
@@ -57,6 +59,10 @@ class PathFollowerNode(Node):
         # Obstacle state (set by scan callback, read by control loop)
         self._emergency_stop: bool = False
         self._slow_factor:    float = 1.0
+
+        # Initial spin — starts when first slam_pose arrives (SLAM + controllers ready)
+        self._spinning: bool = False
+        self._spin_start_time = None
 
         self.create_subscription(Path,        '/path',      self._path_cb,  10)
         self.create_subscription(PoseStamped, '/slam_pose', self._pose_cb,  10)
@@ -80,7 +86,15 @@ class PathFollowerNode(Node):
             f'New path: {len(msg.poses)} waypoints')
 
     def _pose_cb(self, msg: PoseStamped):
+        first_pose = self._robot_pose is None
         self._robot_pose = msg
+        if first_pose:
+            spin_dur = self.get_parameter('initial_spin_duration').value
+            if spin_dur > 0.0:
+                self._spinning = True
+                self._spin_start_time = self.get_clock().now()
+                self.get_logger().info(
+                    f'SLAM active — starting {spin_dur:.0f}s initial map spin')
 
     def _scan_cb(self, msg: LaserScan):
         ranges = np.array(msg.ranges, dtype=np.float64)
@@ -121,6 +135,19 @@ class PathFollowerNode(Node):
                 'Emergency stop — obstacle too close', throttle_duration_sec=0.5)
             self._cmd_pub.publish(cmd)
             return
+
+        # Initial 360° spin so SLAM can see all surrounding walls before navigation
+        if self._spinning and self._spin_start_time is not None:
+            elapsed = (self.get_clock().now() - self._spin_start_time).nanoseconds / 1e9
+            spin_dur = self.get_parameter('initial_spin_duration').value
+            if elapsed < spin_dur:
+                cmd.angular.z = self.get_parameter('initial_spin_speed').value
+                self._cmd_pub.publish(cmd)
+                return
+            else:
+                self._spinning = False
+                self.get_logger().info(
+                    'Initial spin complete — ready for navigation goals')
 
         if self._path is None or self._robot_pose is None:
             self._cmd_pub.publish(cmd)
