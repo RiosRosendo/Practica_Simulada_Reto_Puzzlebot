@@ -5,6 +5,7 @@ from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
+from launch.conditions import IfCondition
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 
@@ -24,6 +25,12 @@ def generate_launch_description():
     world_name_arg = DeclareLaunchArgument(
         name="world_name",
         default_value="empty"
+    )
+
+    start_rsp_arg = DeclareLaunchArgument(
+        name="start_rsp",
+        default_value="true",
+        description="Launch robot_state_publisher inside this launch file (set false when the caller launches its own RSP)",
     )
 
     world_path = PathJoinSubstitution([
@@ -67,7 +74,8 @@ def generate_launch_description():
         parameters=[{
             "robot_description": robot_description,
             "use_sim_time": True
-        }]
+        }],
+        condition=IfCondition(LaunchConfiguration("start_rsp")),
     )
 
     gazebo = IncludeLaunchDescription(
@@ -94,7 +102,9 @@ def generate_launch_description():
         arguments=[
             "/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock",
             "/imu@sensor_msgs/msg/Imu[ignition.msgs.IMU",
-            "/scan@sensor_msgs/msg/LaserScan[ignition.msgs.LaserScan"
+            "/scan@sensor_msgs/msg/LaserScan[ignition.msgs.LaserScan",
+            "/camera/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image",
+            "/camera/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
         ],
         remappings=[
             ('/imu', '/imu/out'),
@@ -104,6 +114,7 @@ def generate_launch_description():
     return LaunchDescription([
         model_arg,
         world_name_arg,
+        start_rsp_arg,
         gz_resource_path,
         ign_resource_path,
         gl_always_software,

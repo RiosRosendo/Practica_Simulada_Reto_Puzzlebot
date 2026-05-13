@@ -1,0 +1,48 @@
+# ── A* Global Planner ──────────────────────────────────────────────────────
+astar_planner:
+  ros__parameters:
+    # Inflate obstacles by this radius (m) to keep robot away from walls
+    inflation_radius: 0.25
+    # OccupancyGrid cells >= this value (0-100) are treated as obstacles
+    obstacle_threshold: 50
+    # Replan automatically when a new obstacle is detected in front
+    replan_on_scan: true
+    # Distance threshold (m) below which a scan reading triggers replanning
+    replan_obstacle_dist: 0.55
+
+# ── Pure-Pursuit Path Follower ─────────────────────────────────────────────
+path_follower:
+  ros__parameters:
+    # Distance ahead on the path the robot aims at (m)
+    lookahead_distance: 0.40
+    # Nominal forward speed when no obstacle is nearby (m/s)
+    linear_speed: 0.20
+    # Proportional gain for angular velocity (rad/s per rad of error)
+    angular_gain: 2.00
+    # Hard cap on angular velocity (rad/s)
+    max_angular_speed: 1.80
+    # Distance to final goal at which navigation is considered complete (m)
+    goal_tolerance: 0.15
+    # Waypoints closer than this distance are skipped (m)
+    wp_skip_dist: 0.10
+    # Full stop when any obstacle is closer than this distance (m)
+    obstacle_stop_dist: 0.35
+    # Start slowing down below this distance (m)
+    obstacle_slow_dist: 0.60
+    # Half-angle of the forward cone monitored for obstacles (degrees)
+    obstacle_cone_deg: 40.0
+
+# ── Dynamic Obstacle Spawner ───────────────────────────────────────────────
+obstacle_spawner:
+  ros__parameters:
+    # Must match the Gazebo world name in the .world file
+    world_name: default
+    # Seconds between each obstacle spawn
+    spawn_interval: 20.0
+    # Stop spawning after this many obstacles
+    max_obstacles: 5
+    # Random spawn area bounds (m) — keep inside the walled arena
+    arena_min: -3.5
+    arena_max:  3.5
+    # Clear zone around the robot start position (m)
+    safe_radius: 0.8

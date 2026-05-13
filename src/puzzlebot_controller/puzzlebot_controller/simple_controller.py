@@ -10,7 +10,18 @@ from nav_msgs.msg import Odometry
 import numpy as np
 import math
 from tf2_ros import TransformBroadcaster
-from tf_transformations import quaternion_from_euler
+
+
+def quaternion_from_euler(roll, pitch, yaw):
+    cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
+    cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
+    cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
+    return [
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy,
+        cr * cp * cy + sr * sp * sy,
+    ]
 
 
 class SimpleController(Node):
