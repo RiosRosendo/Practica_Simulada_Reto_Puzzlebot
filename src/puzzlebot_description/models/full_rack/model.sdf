@@ -1,0 +1,34 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="full_rack">
+    <static>true</static>
+    <link name="link">
+
+      <!-- Collision: simplified box so physics/LIDAR is cheap -->
+      <!-- At scale 0.025: mesh is 0.30 x 0.875 x 0.6625 m -->
+      <collision name="collision">
+        <pose>0 0 0.331 0 0 0</pose>
+        <geometry>
+          <box><size>0.30 0.875 0.6625</size></box>
+        </geometry>
+      </collision>
+
+      <!-- Visual: actual STL mesh, scaled from raw CAD units to metres -->
+      <!-- Mesh origin is at one corner; pose shifts it so link origin = base centre -->
+      <visual name="visual">
+        <pose>0.15 0.3375 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://full_rack/meshes/full_rack.stl</uri>
+            <scale>0.025 0.025 0.025</scale>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.6 0.5 0.3 1</ambient>
+          <diffuse>0.7 0.6 0.4 1</diffuse>
+        </material>
+      </visual>
+
+    </link>
+  </model>
+</sdf>
